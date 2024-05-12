@@ -8,7 +8,7 @@ block_size = 32
 max_iters = 5000
 eval_interval = 500
 learning_rate = 1e-3
-device = 'cuda' if torch.cuda.is_available() else'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else'cpu'
 eval_iters = 200
 n_embd = 384 #384/6=64
 dropout = 0.2
@@ -54,9 +54,9 @@ def get_batch(split):
     # 当生成随机位置抓取数据的时候，生辰随机偏移量批量大小
     ix = torch.randint(len(data) - block_size, (batch_size,))
     # stack 函数可以将数据按照给定索引'ix'切片堆叠成张量，作为行堆叠起来，成为4*8张量中的一行
-    x = torch.stack([data[i:i+block_size] for i in ix])
-    y = torch.stack([data[i+1:i+block_size+1]for i in ix])
-    x,y = x.to(device), y.to(device)
+    x = torch.stack([data[i:i+block_size] for i in ix]).to(device)
+    y = torch.stack([data[i+1:i+block_size+1]for i in ix]).to(device)
+
     return x, y
 
 
@@ -190,15 +190,18 @@ class GPTLanguageMode(nn.Module):
         for _ in range(max_new_tokens):
             # 不可以超过位置嵌入的范围
             idx_cond = idx[:, -block_size:]
+            idx_cond = idx_cond.to(device)
             # prediction
             logits, loss = self(idx_cond)
+
             # focus on the last step only
             logits = logits[:, -1, :]  # (B, C)
             probs = F.softmax(logits, dim=-1)  # dim = -1表示在最后一个维度进行
             # 从概率分布中抽取样本
             idx_next = torch.multinomial(probs, num_samples=1)
             # dim=1 表示在第二个维度（列）拼接
-            idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
+            idx = torch.cat((idx, idx_next), dim=1)
+            idx = idx.to(device)
         return idx
 
 model = GPTLanguageMode(vocab_size)
@@ -223,5 +226,6 @@ for iter in range(max_iters):
     optimizer.step()
 
 idx = torch.zeros((1, 1),dtype = torch.long)
+idx = idx.to(device)
 # 张量变成列表
 print(decode(m.generate(idx, max_new_tokens = 400)[0].tolist()))
